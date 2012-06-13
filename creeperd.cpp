@@ -11,35 +11,40 @@ using namespace std;
 
 int main(int argc,char* argv[]) {
 	char *ascport;
+	char buffer[1024];
 	int port;
-	struct sockaddr_in server_address;
 	int reuse_addr = 1;
-	struct timeval timeout;
 	int readsocks;
 	int sock;
-	fd_set socks;
 	int highsock;
-	char buffer[1024];
-	char *cur_char;
 	int connectlist[5];
+	struct sockaddr_in server_address;
+	struct timeval timeout;
+	fd_set socks;
 
 	if (argc < 2) {
 		printf("usage: %s port\r\n",argv[0]);
-		exit(EXIT_FAILURE);
+		exit(1);
 	}
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(sock < 0) {
 		perror("socket");
-		exit(EXIT_FAILURE);
+		exit(2);
 	}
 
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr));
+	if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr)) ==-1) {
+		perror("Server-setsockopt() error!");
+		exit(3);
+	}
+	printf("port entered; %s\r\n", argv[1]);
 
-	ascport = (char *)malloc(sizeof(char)* 6);
-	memcpy(ascport, argv[1], sizeof(*ascport));
+	ascport = (char *)malloc(sizeof(*ascport)*6);
+	memcpy(ascport, argv[1], sizeof(*ascport)*6);
+	printf("initializing port: %s\r\n", ascport);
 
 	port = atoi(ascport);
+	printf("initializing port: %d\r\n",port);
 
 	memset((char *) &server_address, 0, sizeof(server_address));
 
@@ -49,7 +54,7 @@ int main(int argc,char* argv[]) {
 	if (bind (sock, (struct sockaddr *) &server_address, sizeof(server_address)) <0) {
 		perror("bind");
 		close(sock);
-		exit(EXIT_FAILURE);
+		exit(4);
 	}
 
 	listen(sock, 5);
