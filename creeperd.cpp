@@ -1,29 +1,27 @@
-#include <iostream.h>
-#include <cmath.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 using namespace std;
 
-int sock;
-
-
-
-
-
-
-
-
-
-
-void build_select_list();
-
-void setnonblocking(int sock);
-
-int main(char* args[]) {
+int main(int argc,char* argv[]) {
 	char *ascport;
 	int port;
 	struct sockaddr_in server_address;
 	int reuse_addr = 1;
-	struct timeval timout;
+	struct timeval timeout;
 	int readsocks;
+	int sock;
+	fd_set socks;
+	int highsock;
+	char buffer[1024];
+	char *cur_char;
+	int connectlist[5];
 
 	if (argc < 2) {
 		printf("usage: %s port\r\n",argv[0]);
@@ -38,9 +36,7 @@ int main(char* args[]) {
 
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr));
 
-	setnonblocking(sock);
-
-	ascport = malloc(sizeof char * 6);
+	ascport = (char *)malloc(sizeof(char)* 6);
 	memcpy(ascport, argv[1], sizeof(*ascport));
 
 	port = atoi(ascport);
@@ -62,38 +58,69 @@ int main(char* args[]) {
 	memset((char *) &connectlist, 0 , sizeof(connectlist));
 
 	while(1) {
-		
-	}
-}
+		FD_ZERO(&socks);
 
-void build_select_list() {
-	int listnum;
+		FD_SET(sock, &socks);
 
-	FD_ZERO(&socks);
-
-	FD_SET(sock, &socks);
-
-	for(listnum = 0; listnum < 5; listnum++) {
-		if(connectlist[listnum] != 0) {
-			FD_SET(connectlist[listnum], &socks);
-			if(connectlist[listnum] > highsock) 
-				highsock = connectlist[listnum];
+		for(int listnum = 0; listnum < 5; listnum++) {
+			if(connectlist[listnum] != 0) {
+				FD_SET(connectlist[listnum], &socks);
+				if(connectlist[listnum] > highsock) 
+					highsock = connectlist[listnum];
+			}
 		}
+
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+
+		readsocks = select(highsock+1, &socks, (fd_set *) 0, (fd_set *) 0, &timeout);
+
+		if(readsocks < 0) {
+			perror("select");
+			exit(EXIT_FAILURE);
+		}
+		if(readsocks == 0) {
+			printf(".");
+			fflush(stdout);
+		}
+		else {
+			if(FD_ISSET(sock,&socks)){
+				int connection;
+				connection = accept(sock, NULL, NULL);
+				if (connection < 0) {
+					perror("accept");
+					exit(EXIT_FAILURE);
+				}
+
+				for(int i = 0; (i < 5) && (connection != -1); i ++){
+					if (connectlist[i] == 0) {
+						printf("\nConnection accepted:   FD=%d; Slot=%d\n",
+								connection,i);
+						connectlist[i] = connection;
+						connection = -1;
+					}
+					if (connection != -1) {
+						printf("\nNo room left for new client.\n");
+						close(connection);
+					}
+				}
+
+				for (int j = 0; j < 5; j++) {
+					if (FD_ISSET(connectlist[j],&socks)) {
+						if (recv(connectlist[j],buffer,1024,0) <= 0) {
+							printf("\nConnection lost: FD=%d;  Slot=%d\n",
+									connectlist[j],j);
+							close(connectlist[j]);
+							connectlist[j] = 0;
+						}
+						else {
+							printf("\nReceived: %s; ",buffer);
+						}
+					}
+				}
+
+			}
+		}	
 	}
 }
 
-void setnonblocking(int sock) {
-	int opts;
-
-	opts = fcntl(sock,F_GETFL);
-	if (opts < 0) {
-		perror("fcntl(F_GETFL)");
-		exit(EXIT_FAILURE);
-	}
-	opts = (opts | O_NONBLOCK);
-	if (fcntl(sock,F_SETFL,opts) < 0) {
-		perror("fcntl(F_SETFL)");
-		exit(EXIT_FAILURE);
-	}
-	return;
-}
